@@ -95,3 +95,8 @@ class SPostInfo(BaseModel):
     
     model_config = ConfigDict(from_attributes=True)
     
+class SAuthInfo(BaseModel):
+    user: SUserReadBase
+    access_token: str
+    token_type: str = 'bearer'
+    hi_message: str = 'Добро пожаловать!'

@@ -1,8 +1,9 @@
 from repository.user import UserRepository, RepoDep, Cache, RepoPostDep, PostRepository
 from models.user import UsersModel, PostModel
-from schemas.user import SUserAdd, SUserRead, SUserSKillsRead, SUserAddSkill, SPostAdd, SPostInfo, SUserReadBase
-from core.security import hash_password
-from core.exceptions import NameRepeatError, UserNotFoundError, SkillsNotFoundError, SkillInListNotFoundError
+from schemas.user import SUserAdd, SUserRead, SUserSKillsRead, SUserAddSkill, SPostAdd, SPostInfo, SUserReadBase, SAuthInfo
+from core.security import hash_password, verify_password
+from auth import create_token
+from core.exceptions import NameRepeatError, UserNotFoundError, SkillsNotFoundError, SkillInListNotFoundError, AuthError
 from typing import List, Annotated
 from fastapi import Depends
 from sqlalchemy.exc import IntegrityError
@@ -24,6 +25,27 @@ class UserRegistrationService:
         
         return SUserRead.model_validate(new_user_create)
     
+    async def auth(self, user_name: str, user_password: str):
+        user = await self.repo.get_user_by_name(user_name=user_name)
+        
+        if user is None:
+            raise AuthError()
+        
+        password_verify = verify_password(plain_password=user_password, hashed_password=user.password)
+        
+        if not password_verify:
+            raise AuthError()
+        
+        token = create_token(data= {'sub': user.name})
+        hi_message = f'{user.name} добро пожаловать! Рады вас видеть!'
+        
+        return SAuthInfo(
+            user=SUserReadBase.model_validate(user),
+            access_token=token,
+            hi_message=hi_message
+        )
+          
+    
 class UserReadService:
     def __init__(self, repo: RepoDep):
         self.repo = repo
@@ -33,10 +55,15 @@ class UserReadService:
     
         return [SUserRead.model_validate(user) for user in users]
     
-    async def get_one_user(self, user_id: int) -> SUserRead:
-        user = await self.repo.get_one_user(user_id=user_id)
+    async def get_one_user(self, user_data: int | str) -> SUserRead:
+        if isinstance(user_data, int):
+            user = await self.repo.get_one_user(user_id=user_data)
+        else:
+            user = await self.repo.get_user_by_name(user_name=user_data)
+        
         if user is None:
             raise UserNotFoundError()
+            
         return SUserRead.model_validate(user)
     
     async def get_user_skills(self, user_id: int) -> SUserSKillsRead:

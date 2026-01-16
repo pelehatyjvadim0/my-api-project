@@ -16,6 +16,15 @@ class DataBase_Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file='.env',
                                       env_prefix='DB_',
                                       extra='ignore')
-    
 
+class JWT_Settings(BaseSettings):
+    SECRET_KEY: str 
+    EXPIRE_TIME: int = 30
+    ALGORITHM: str = 'HS256'
+
+    model_config = SettingsConfigDict(env_file='.env',
+                                      env_prefix='JWT_',
+                                      extra='ignore')
+    
 settings_db = DataBase_Settings()
+settings_jwt = JWT_Settings() #type: ignore

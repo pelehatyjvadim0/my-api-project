@@ -37,3 +37,10 @@ class SkillInListNotFoundError(BaseException):
         self.custom_detail = f'Переданный вами навык ({skill_name}) не зарегистрирован в базе!'
         super().__init__(detail=self.custom_detail)
         
+class AuthError(BaseException):
+    status_code = status.HTTP_401_UNAUTHORIZED
+    
+    def __init__(self):
+        self.custom_detail = 'Логин или пароль не верны!'
+        super().__init__(detail=self.custom_detail)
+        

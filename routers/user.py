@@ -1,19 +1,29 @@
-from fastapi import APIRouter, status, Request
+from fastapi import APIRouter, status, Request, Depends
+from fastapi.security import OAuth2PasswordRequestForm
 from service.user import ServiceUserRead, ServiceUserReg, ServiceUserRedaction, ServicePost
 from typing import List
-from schemas.user import SUserAdd, SUserRead, SUserSKillsRead, SUserAddSkill, SPostInfo, SPostAdd
+from schemas.user import SUserAdd, SUserRead, SUserSKillsRead, SUserAddSkill, SPostInfo, SPostAdd, SAuthInfo
 from core.redis import RedisDep
 import json
 from pydantic import TypeAdapter
 from utils import cache_response, clean_cache, rate_limit
 import asyncio
+from auth import get_current_user
+
 
 router = APIRouter(prefix='/users')
+
+@router.post('/login', response_model=SAuthInfo)
+async def login(service: ServiceUserReg, from_data: OAuth2PasswordRequestForm = Depends()):
+    user = await service.auth(user_name=from_data.username, user_password=from_data.password)
+    
+    return user
+
 
 @router.get('', status_code=status.HTTP_200_OK)
 @rate_limit(limit=2, period=60)
 @cache_response(expire=100, model=SUserRead)
-async def get_all_users(service: ServiceUserRead, request: Request) -> List[SUserRead]:
+async def get_all_users(service: ServiceUserRead, request: Request, token = Depends(get_current_user)) -> List[SUserRead]:
     
     users = await service.get_all_users()
     
@@ -30,8 +40,8 @@ async def create_user(user: SUserAdd, service: ServiceUserReg) -> SUserRead:
 @cache_response(expire=100, model=SUserRead)
 async def get_user(user_id: int, service: ServiceUserRead) -> SUserRead:
     
-    user = await service.get_one_user(user_id=user_id)
-        
+    user = await service.get_one_user(user_data=user_id)
+
     return user
     
 @router.get('/user_skills/{user_id:int}', status_code=status.HTTP_200_OK, response_model=SUserSKillsRead)

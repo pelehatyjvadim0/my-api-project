@@ -72,6 +72,13 @@ class UserRepository(BaseUserRepository):
         
         return result.scalar_one_or_none()
     
+    async def get_user_by_name(self, user_name: str) -> UsersModel | None:
+        query = select(UsersModel).options(joinedload(UsersModel.city_obj)).where(UsersModel.name == user_name)
+
+        result = await self.session.execute(query)
+        
+        return result.scalar_one_or_none()
+    
     async def get_user_skills(self, user_id: int) -> UsersModel | None:
         query = select(UsersModel).options(selectinload(UsersModel.skills_list)).where(UsersModel.id == user_id)
         
