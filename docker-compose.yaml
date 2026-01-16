@@ -1,0 +1,46 @@
+services:
+  postgres-db:
+    image: postgres:15
+    container_name: postgres-db
+    restart: always
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=1234
+      - POSTGRES_DB=mydb
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  my-cool-app:
+    build: .
+    container_name: my-cool-app
+    environment:
+      - DB_USER=postgres
+      - DB_PASSWORD=1234
+      - DB_HOST=postgres-db
+      - DB_PORT=5432
+      - DB_DB=mydb
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - .:/app
+    depends_on:
+      postgres-db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+  redis-db:
+    image: redis:7-alpine
+    container_name: redis-db
+    ports:
+      - "6379:6379"
+
+volumes:
+  postgres-data:
