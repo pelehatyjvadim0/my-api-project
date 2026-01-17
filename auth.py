@@ -56,3 +56,5 @@ class RoleCheck:
             )
         
         return user
+    
+REFRESH_TOKEN_EXPIRE_DAYS = 30

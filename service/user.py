@@ -1,12 +1,14 @@
-from repository.user import UserRepository, RepoDep, Cache, RepoPostDep, PostRepository
-from models.user import UsersModel, PostModel
-from schemas.user import SUserAdd, SUserRead, SUserSKillsRead, SUserAddSkill, SPostAdd, SPostInfo, SUserReadBase, SAuthInfo
+from repository.user import UserRepository, RepoDep, Cache, RepoPostDep, PostRepository, RepoRefreshDep, RefreshRepository
+from models.user import UsersModel, PostModel, RefreshSessionModel
+from schemas.user import SUserAdd, SUserRead, SUserSKillsRead, SUserAddSkill, SPostAdd, SPostInfo, SUserReadBase
 from core.security import hash_password, verify_password
 from auth import create_token
 from core.exceptions import NameRepeatError, UserNotFoundError, SkillsNotFoundError, SkillInListNotFoundError, AuthError, SkillAlreadyInUser
 from typing import List, Annotated
 from fastapi import Depends
 from sqlalchemy.exc import IntegrityError
+import secrets 
+from datetime import datetime, timedelta, timezone
 
 class UserRegistrationService:
     def __init__(self, repo: RepoDep):
@@ -25,9 +27,9 @@ class UserRegistrationService:
         
         return SUserRead.model_validate(new_user_create)
     
-    async def auth(self, user_name: str, user_password: str):
+    async def auth(self, user_name: str, user_password: str, token_service: 'ServiceToken'):
         user = await self.repo.get_user_by_name(user_name=user_name)
-        
+
         if user is None:
             raise AuthError()
         
@@ -37,13 +39,14 @@ class UserRegistrationService:
             raise AuthError()
         
         token = create_token(data= {'sub': user.name})
-        hi_message = f'{user.name} добро пожаловать! Рады вас видеть!'
         
-        return SAuthInfo(
-            user=SUserReadBase.model_validate(user),
-            access_token=token,
-            hi_message=hi_message
-        )
+        refresh_model = await token_service.create_token(user_id=user.id)
+    
+        return {
+            'access_token': token,
+            'token_type': 'bearer',
+            'refresh_token': refresh_model.refresh_token
+        }
           
     
 class UserReadService:
@@ -116,7 +119,48 @@ class PostService:
         
         posts = [SPostInfo.model_validate(post) for post in posts]
 
-        return posts        
+        return posts 
+    
+class TokenService:
+    def __init__(self, repo: RefreshRepository):
+        self.repo = repo
+        
+    async def create_token(self, user_id: int) -> RefreshSessionModel:
+        secret_token = secrets.token_urlsafe(64)
+        expires_at = datetime.now(timezone.utc) + timedelta(days=30)
+        new_refresh_token = RefreshSessionModel(
+            refresh_token=secret_token,
+            expires_at=expires_at,
+            user_id=user_id
+        )
+        refresh_token = await self.repo.create_token(token=new_refresh_token)
+        return refresh_token
+    
+    async def refresh_token(self, old_refresh_token: str):
+        session = await self.repo.get_token(token=old_refresh_token)
+        
+        if session is None:
+            raise AuthError(detail='Пользователь не найден!')
+        
+        if session.expires_at < datetime.now(timezone.utc):
+            await self.repo.delete_token(token=old_refresh_token)
+            raise AuthError(detail='Рефреш Токен истёк')
+        
+        await self.repo.delete_token(token=old_refresh_token)
+        
+        from auth import create_token
+        
+        new_refresh_model = await self.create_token(user_id=session.user_id)
+        new_access_token = create_token(data = {'sub': str(session.user_id)})
+        
+        return {
+            'access_token': new_access_token,
+            'refresh_token': new_refresh_model.refresh_token
+        }
+        
+    async def delete_token(self, token: str):
+        await self.repo.delete_token(token=token)
+        return
         
 def get_user_reg_service(repo: RepoDep) -> UserRegistrationService:
     return UserRegistrationService(repo)
@@ -130,7 +174,11 @@ def get_user_redaction_service(repo: RepoDep) -> UserRedService:
 def get_post_service(user_repo: RepoDep, post_repo: RepoPostDep) -> PostService:
     return PostService(user_repo, post_repo)
 
+def get_token_service(repo: RepoRefreshDep) -> TokenService:
+    return TokenService(repo=repo)
+
 ServiceUserReg = Annotated[UserRegistrationService, Depends(get_user_reg_service)]
 ServiceUserRead = Annotated[UserReadService, Depends(get_user_read_service)]
 ServiceUserRedaction = Annotated[UserRedService, Depends(get_user_redaction_service)]
 ServicePost = Annotated[PostService, Depends(get_post_service)]
+ServiceToken = Annotated[TokenService, Depends(get_token_service)]

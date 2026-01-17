@@ -1,8 +1,8 @@
-from fastapi import APIRouter, status, Request, Depends
+from fastapi import APIRouter, status, Request, Depends, Response, Cookie, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
-from service.user import ServiceUserRead, ServiceUserReg, ServiceUserRedaction, ServicePost
+from service.user import ServiceUserRead, ServiceUserReg, ServiceUserRedaction, ServicePost, ServiceToken
 from typing import List
-from schemas.user import SUserAdd, SUserRead, SUserSKillsRead, SUserAddSkill, SPostInfo, SPostAdd, SAuthInfo
+from schemas.user import SUserAdd, SUserRead, SUserSKillsRead, SUserAddSkill, SPostInfo, SPostAdd, STokenResponse
 from core.redis import RedisDep
 import json
 from pydantic import TypeAdapter
@@ -12,16 +12,80 @@ from auth import get_current_user, RoleCheck
 from models.user import UserRole
 
 only_admin = [UserRole.ADMIN]
-
+MAX_AGE = 30 * 24 * 60 * 60
 
 router = APIRouter(prefix='/users')
 
-@router.post('/login', response_model=SAuthInfo)
-async def login(service: ServiceUserReg, from_data: OAuth2PasswordRequestForm = Depends()):
-    user = await service.auth(user_name=from_data.username, user_password=from_data.password)
+@router.post('/login', response_model=STokenResponse)
+async def login(response: Response, service_reg: ServiceUserReg, service_token: ServiceToken,  from_data: OAuth2PasswordRequestForm = Depends()):
+    tokens = await service_reg.auth(user_name=from_data.username, user_password=from_data.password, token_service=service_token)
     
-    return user
+    response.set_cookie(
+        key='refresh_token',
+        value=tokens['refresh_token'],
+        httponly=True,
+        secure=True,
+        samesite='lax',
+        max_age=MAX_AGE
+    )
+    
+    return {
+        'access_token': tokens['access_token'],
+        'token_type': 'bearer'
+    }
 
+@router.post('/refresh', response_model=STokenResponse)
+async def refresh_token(
+    service: ServiceToken,
+    response: Response,
+    refresh_token: str = Cookie(None)
+):
+    if not refresh_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail='Refresh token missing'
+        )
+        
+    print(refresh_token)
+    
+    tokens = await service.refresh_token(refresh_token)
+    
+    response.set_cookie(
+        key='refresh_token',
+        value=tokens['refresh_token'],
+        httponly=True,
+        secure=True,
+        samesite='lax',
+        max_age=MAX_AGE
+    )
+    
+    return {'access_token': tokens['access_token']}
+
+@router.post('/logout')
+async def logout(
+    response: Response,
+    service: ServiceToken,
+    refresh_token = Cookie(None)
+):
+    if refresh_token is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail='Токен невалиден'
+        )
+        
+    await service.delete_token(token=refresh_token)
+    
+    response.delete_cookie(
+        key = 'refresh_token',
+        httponly=True,
+        secure=True,
+        samesite='lax'
+    )
+    
+    return {
+        'status': 'ok',
+        'msg': 'Вы успешно вышли из аккаунта'
+    }
 
 @router.get('', status_code=status.HTTP_200_OK)
 @rate_limit(limit=5, period=20)
@@ -54,7 +118,7 @@ async def get_user_skills(user_id: int, service: ServiceUserRead):
 
 @router.delete('/del_user/{user_id:int}', status_code=status.HTTP_204_NO_CONTENT)
 @clean_cache(get_all_users)
-async def delete_user(user_id: int, service: ServiceUserRedaction):
+async def delete_user(user_id: int, service: ServiceUserRedaction, user = Depends(RoleCheck(only_admin))):
     
     await service.delete_user(user_id=user_id)
     

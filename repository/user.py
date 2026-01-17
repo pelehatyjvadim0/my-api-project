@@ -2,12 +2,13 @@ from sqlalchemy import select, delete
 from sqlalchemy.orm import joinedload, selectinload
 from abc import ABC, abstractmethod
 from database import AsyncSession
-from models.user import UsersModel, CityModel, SkillsModel, user_skills, PostModel
+from models.user import UsersModel, CityModel, SkillsModel, user_skills, PostModel, RefreshSessionModel
 from fastapi import Depends
 from typing import Annotated
 from database import SessionDep
 from typing import List
 from core.exceptions import UserNotFoundError
+from datetime import datetime
 
 class Cache:
     _cities: dict[str, int] = {}
@@ -134,13 +135,46 @@ class PostRepository:
         result = await self.session.execute(query)
         
         return list(result.scalars().all())
+    
+class RefreshRepository:
+    def __init__(self, session: AsyncSession):
+        self.session = session
         
+    async def create_token(self, token: RefreshSessionModel) -> RefreshSessionModel:
+        self.session.add(token)
+        
+        await self.session.commit()
+        
+        await self.session.refresh(token)
+        
+        return token
+    
+    async def get_token(self, token: str) -> RefreshSessionModel | None:
+        query = select(RefreshSessionModel).where(RefreshSessionModel.refresh_token == token)
+        result = await self.session.execute(query)
+        
+        return result.scalar_one_or_none()
+    
+    async def delete_token(self, token: str):
+        query = delete(RefreshSessionModel).where(RefreshSessionModel.refresh_token == token)
+        
+        await self.session.execute(query)
+        
+        await self.session.commit()
+        
+        return
+    
 async def give_repo(session: SessionDep):
     return UserRepository(session)
 
 async def give_post_repo(session: SessionDep):
     return PostRepository(session=session)
 
+async def give_refresh_repo(session: SessionDep):
+    return RefreshRepository(session=session)
+
+
 RepoDep = Annotated[UserRepository, Depends(give_repo)]
 RepoPostDep = Annotated[PostRepository, Depends(give_post_repo)]
+RepoRefreshDep = Annotated[RefreshRepository, Depends(give_refresh_repo)]
         

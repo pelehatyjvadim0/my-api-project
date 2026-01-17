@@ -40,8 +40,8 @@ class SkillInListNotFoundError(BaseException):
 class AuthError(BaseException):
     status_code = status.HTTP_401_UNAUTHORIZED
     
-    def __init__(self):
-        self.custom_detail = 'Логин или пароль не верны!'
+    def __init__(self, detail: str | None = None):
+        self.custom_detail = detail or 'Логин или пароль не верны!'
         super().__init__(detail=self.custom_detail)
         
 class SkillAlreadyInUser(BaseException):

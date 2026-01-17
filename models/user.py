@@ -1,8 +1,9 @@
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import ForeignKey, Table, Column, Enum
+from sqlalchemy import ForeignKey, Table, Column, Enum, String, DateTime, func
 from database import Model
 from typing import List
 import enum
+from datetime import datetime, timezone
 
 user_skills = Table(
     'user_skills',
@@ -63,5 +64,12 @@ class PostModel(Model):
     
     author: Mapped['UsersModel'] = relationship(back_populates='posts',
                                                 init=False)
-
     
+class RefreshSessionModel(Model):
+    __tablename__ = 'refresh_tokens'
+    
+    id: Mapped[int] = mapped_column(primary_key=True, init= False)
+    refresh_token: Mapped[str] = mapped_column(String, index=True, unique=True, nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), init = False)
