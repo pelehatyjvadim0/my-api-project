@@ -55,6 +55,7 @@ class SUserAdd(SUserBase):
 class SUserRead(SUserBase):
     id: int
     city: DisplayNameStr = Field(validation_alias='city_obj')
+    role: str 
     
     model_config = ConfigDict(populate_by_name=True,
                               from_attributes=True)

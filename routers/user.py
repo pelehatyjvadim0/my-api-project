@@ -8,7 +8,10 @@ import json
 from pydantic import TypeAdapter
 from utils import cache_response, clean_cache, rate_limit
 import asyncio
-from auth import get_current_user
+from auth import get_current_user, RoleCheck
+from models.user import UserRole
+
+only_admin = [UserRole.ADMIN]
 
 
 router = APIRouter(prefix='/users')
@@ -21,9 +24,9 @@ async def login(service: ServiceUserReg, from_data: OAuth2PasswordRequestForm = 
 
 
 @router.get('', status_code=status.HTTP_200_OK)
-@rate_limit(limit=2, period=60)
+@rate_limit(limit=5, period=20)
 @cache_response(expire=100, model=SUserRead)
-async def get_all_users(service: ServiceUserRead, request: Request, token = Depends(get_current_user)) -> List[SUserRead]:
+async def get_all_users(service: ServiceUserRead, request: Request) -> List[SUserRead]:
     
     users = await service.get_all_users()
     
@@ -57,10 +60,10 @@ async def delete_user(user_id: int, service: ServiceUserRedaction):
     
     return
 
-@router.post('/add_skill/{user_id:int}', status_code=status.HTTP_202_ACCEPTED, response_model=SUserSKillsRead)
+@router.post('/add_skill', status_code=status.HTTP_202_ACCEPTED, response_model=SUserSKillsRead)
 @clean_cache(get_user_skills)
-async def user_add_skill(user_id: int, skill: SUserAddSkill, service: ServiceUserRedaction):
-    update_user = await service.add_skill(user_id=user_id, skill=skill)
+async def user_add_skill(skill: SUserAddSkill, service: ServiceUserRedaction, user = Depends(get_current_user)):
+    update_user = await service.add_skill(user_id=user.id, skill=skill)
     
     return update_user
 

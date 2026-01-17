@@ -1,7 +1,8 @@
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import ForeignKey, Table, Column
+from sqlalchemy import ForeignKey, Table, Column, Enum
 from database import Model
 from typing import List
+import enum
 
 user_skills = Table(
     'user_skills',
@@ -9,6 +10,10 @@ user_skills = Table(
     Column('user_id', ForeignKey('users.id', ondelete='CASCADE'), primary_key=True),
     Column('skill_id', ForeignKey('skills.id'), primary_key=True)
 )
+
+class UserRole(str, enum.Enum):
+    ADMIN = 'admin'
+    USER = 'user'
 
 class UsersModel(Model):
     __tablename__= 'users'
@@ -29,6 +34,8 @@ class UsersModel(Model):
     
     posts: Mapped[list['PostModel']] = relationship(back_populates='author',
                                                     init = False)
+    
+    role: Mapped[UserRole] = mapped_column(Enum(UserRole), default=UserRole.USER, nullable=False, init= False)
     
 class CityModel(Model):
     __tablename__ = 'cities'
@@ -56,3 +63,5 @@ class PostModel(Model):
     
     author: Mapped['UsersModel'] = relationship(back_populates='posts',
                                                 init=False)
+
+    

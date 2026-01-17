@@ -5,6 +5,7 @@ from config import settings_jwt
 from fastapi.security import OAuth2PasswordBearer
 from database import get_db
 from repository.user import RepoDep
+from models.user import UsersModel, UserRole
     
 def create_token(data: dict):
     to_encode = data.copy()
@@ -42,3 +43,16 @@ async def get_current_user(repo: RepoDep, token: str = Depends(oauth2_scheme)):
         )
     
     return await service.get_one_user(user_data=username)
+
+class RoleCheck:
+    def __init__(self, allowed_roles: list[UserRole]):
+        self.allowed_roles = allowed_roles
+        
+    async def __call__(self, user = Depends(get_current_user)):
+        if user.role not in self.allowed_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f'Недостаточно прав. Нобходимы: {self.allowed_roles}'
+            )
+        
+        return user

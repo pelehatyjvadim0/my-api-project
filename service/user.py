@@ -3,7 +3,7 @@ from models.user import UsersModel, PostModel
 from schemas.user import SUserAdd, SUserRead, SUserSKillsRead, SUserAddSkill, SPostAdd, SPostInfo, SUserReadBase, SAuthInfo
 from core.security import hash_password, verify_password
 from auth import create_token
-from core.exceptions import NameRepeatError, UserNotFoundError, SkillsNotFoundError, SkillInListNotFoundError, AuthError
+from core.exceptions import NameRepeatError, UserNotFoundError, SkillsNotFoundError, SkillInListNotFoundError, AuthError, SkillAlreadyInUser
 from typing import List, Annotated
 from fastapi import Depends
 from sqlalchemy.exc import IntegrityError
@@ -82,7 +82,10 @@ class UserRedService:
     
     async def add_skill(self, user_id: int, skill: SUserAddSkill) -> SUserSKillsRead:
         if skill.skill in Cache._skills:
-            user = await self.repo.add_skill_at_user(user_id=user_id, skill_name=skill.skill)
+            try:
+                user = await self.repo.add_skill_at_user(user_id=user_id, skill_name=skill.skill)
+            except IntegrityError as e:
+                raise SkillAlreadyInUser(skill_name=skill.skill)
             return SUserSKillsRead.model_validate(user)
         else: 
             raise SkillInListNotFoundError(skill_name=skill.skill)

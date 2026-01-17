@@ -44,3 +44,10 @@ class AuthError(BaseException):
         self.custom_detail = 'Логин или пароль не верны!'
         super().__init__(detail=self.custom_detail)
         
+class SkillAlreadyInUser(BaseException):
+    status_code = status.HTTP_409_CONFLICT
+    
+    def __init__(self, skill_name: str):
+        self.custom_detail = f'Скилл {skill_name} уже есть в списке скиллов пользователя!'
+        super().__init__(detail=self.custom_detail)
+        
